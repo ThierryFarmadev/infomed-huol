@@ -1,0 +1,15 @@
+# INFOMED - Suporte à Decisão Farmacêutica (HUOL)
+
+Este projeto é um protótipo desenvolvido como parte da **Iniciação Científica** no curso de **Farmácia da UFRN**, com foco em suporte técnico-científico no **Hospital Universitário Onofre Lopes (HUOL/EBSERH)**.
+
+## Funcionalidades
+- **Análise Técnica:** Consulta de estabilidade e farmacotécnica via IA.
+- **Validação Clínica:** Módulo para farmacêuticos registrarem concordância ou divergência.
+- **Histórico:** Banco de dados local para acompanhamento de consultas.
+- **Relatório:** Exportação de dados para Excel para fins de pesquisa.
+
+## Pesquisador
+**Matheus Thierry Gonçalo de Azevedo** *Graduando em Farmácia - UFRN*
+
+## 🏛️ Instituições
+- Universidade Federal do Rio Grande do Norte (UFRN)
