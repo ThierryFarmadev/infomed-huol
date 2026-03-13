@@ -143,6 +143,7 @@ with col_input:
         if p_input:
             with st.spinner('Acessando literaturas científicas...'):
                 CHAVE = st.secrets["GEMINI_KEY"]
+                print(st.secrets)
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
                 try:
                     # PROMPT REFINADO PARA ABNT
