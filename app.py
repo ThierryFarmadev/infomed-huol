@@ -142,7 +142,7 @@ with col_input:
     if st.button("▶️ Analisar Evidências"):
         if p_input:
             with st.spinner('Acessando literaturas científicas...'):
-                CHAVE = "AIzaSyDuiS_2MNrmFz5_Kz7j_c3Sp9exDsMA1Vs"
+                CHAVE = st.secrets["GEMINI_KEY"]
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
                 try:
                     # PROMPT REFINADO PARA ABNT
@@ -168,5 +168,6 @@ if col_output and st.session_state.get('resposta_atual'):
         st.markdown("##### 📄 Resultado Técnico")
         st.markdown(f'<div class="res-card">{st.session_state.resposta_atual}</div>', unsafe_allow_html=True)
         st.download_button("📥 Baixar Parecer (.txt)", st.session_state.resposta_atual, file_name="analise.txt")
+
 
 st.markdown('<br><div style="font-size: 0.75rem; color: #5c6370; text-align: center;">Projeto de Iniciação Científica - Matheus Thierry / UFRN 2026.</div>', unsafe_allow_html=True)
