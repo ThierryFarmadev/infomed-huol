@@ -152,7 +152,7 @@ with col_input:
                 try:
                     CHAVE = st.secrets["GEMINI_KEY"]
                 except:
-                    CHAVE = "AIzaSyDuiS_2MNrmFz5_Kz7j_c3Sp9exDsMA1Vs"
+                    CHAVE = ""
                 
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={CHAVE}"
                 
