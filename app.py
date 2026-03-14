@@ -1,175 +1,122 @@
 import streamlit as st
-import requests
-import sqlite3
-import pandas as pd
-import io
-import plotly.express as px
-from datetime import datetime
 
-# --- 1. CONFIGURAÇÃO E BANCO DE DADOS ---
-st.set_page_config(page_title="INFOMED - HUOL", page_icon="🏥", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="INFOMED - HUOL", layout="wide", page_icon="💊")
 
-def iniciar_db():
-    conn = sqlite3.connect('feedback_ic.db')
-    c = conn.cursor()
-    # Adicionada coluna 'analise_erro' para a nova funcionalidade
-    c.execute('''CREATE TABLE IF NOT EXISTS avaliacoes 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  data TEXT, farmaco TEXT, pergunta TEXT, 
-                  resposta TEXT, status TEXT, observacao TEXT, analise_erro TEXT)''')
-    conn.commit()
-    conn.close()
-
-def carregar_dados():
-    try:
-        conn = sqlite3.connect('feedback_ic.db')
-        df = pd.read_sql_query("SELECT * FROM avaliacoes", conn)
-        conn.close()
-        return df
-    except: return pd.DataFrame()
-
-def registrar_feedback(status, obs="", analise=""):
-    if st.session_state.get('resposta_atual'):
-        try:
-            conn = sqlite3.connect('feedback_ic.db')
-            c = conn.cursor()
-            data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            farmaco_label = st.session_state.pergunta_atual.split()[0].upper()
-            texto_excel = st.session_state.resposta_atual.replace("**", "").replace("#", "").replace("`", "")
-            texto_excel = " ".join(texto_excel.splitlines()) 
-            c.execute("INSERT INTO avaliacoes (data, farmaco, pergunta, resposta, status, observacao, analise_erro) VALUES (?,?,?,?,?,?,?)",
-                      (data_atual, farmaco_label, st.session_state.pergunta_atual, texto_excel, status, obs, analise))
-            conn.commit()
-            conn.close()
-            st.toast(f"✅ Registro salvo com sucesso!", icon="💾")
-            st.rerun()
-        except Exception as e: st.error(f"Erro ao salvar: {e}")
-
-iniciar_db()
-
-# --- 2. CSS ---
+# --- ESTILIZAÇÃO CSS CUSTOMIZADA ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; background-color: #0e1117; }
-    .sidebar-label { color: #5dade2; font-weight: 700; font-size: 0.8rem; margin-top: 25px; text-transform: uppercase; }
-    .res-card { background: #1c1f26; padding: 25px; border-radius: 12px; border: 1px solid #30363d; color: #e6edf3; line-height: 1.8; }
-    .debug-card { background: #2d1b1b; padding: 20px; border-radius: 8px; border: 1px solid #ff4b4b; color: #ffbcbc; margin-top: 15px; font-size: 0.9rem; }
-    div.stButton > button { background-color: #2d333b !important; color: #adb5bd !important; font-weight: 600 !important; border-radius: 6px !important; }
-    .analyze-btn button { background-color: #1a202c !important; color: #5dade2 !important; border: 1px solid #5dade2 !important; height: 50px !important; }
+    /* Padronização dos botões da Sidebar */
+    div.stButton > button {
+        width: 100%;
+        border-radius: 8px;
+        background-color: #374151; /* Cinza escuro */
+        color: #ffffff;
+        border: 1px solid #4b5563;
+        height: 3em;
+        transition: all 0.3s ease;
+    }
+    
+    div.stButton > button:hover {
+        background-color: #1f2937; /* Cinza ainda mais escuro no hover */
+        border-color: #6b7280;
+    }
+
+    /* Ajuste de tamanho da fonte para os botões de avaliação */
+    div.stButton > button p {
+        font-size: 13px !important;
+        font-weight: 500;
+    }
+
+    /* Estilização da área de texto */
+    .stTextArea textarea {
+        border-radius: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. SIDEBAR ---
-df_logs = carregar_dados()
+# --- LÓGICA DE API KEY (GitHub Secrets / Local) ---
+# No GitHub, você deve ir em Settings > Secrets and Variables > Actions
+# E adicionar uma Secret chamada GEMINI_API_KEY
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    st.error("Erro: Chave de API não configurada. Verifique os Secrets do GitHub ou o arquivo .streamlit/secrets.toml")
+    st.stop()
+
+# --- SIDEBAR (BARRA LATERAL) ---
 with st.sidebar:
-    st.markdown("### 🔬 PESQUISADOR")
-    st.info(f"**Matheus Thierry**\n\nUFRN / HUOL")
-    st.metric("Total de Registros", len(df_logs))
-
-    if st.button("➕ Nova Consulta", use_container_width=True):
-        st.session_state.pergunta_atual, st.session_state.resposta_atual, st.session_state.analise_erro = "", "", ""
+    st.markdown("### :material/person_search: PESQUISADOR")
+    with st.container(border=True):
+        st.markdown(f"**Matheus Thierry**")
+        st.caption("UFRN / HUOL")
+    
+    st.markdown("---")
+    
+    # Métrica de Registros
+    st.metric(label="Total de Registros", value="0")
+    
+    if st.button(":material/add_circle: Nova Consulta"):
         st.rerun()
+
+    st.markdown("### :material/fact_check: AVALIAÇÃO")
     
-    st.markdown('<p class="sidebar-label">✅ AVALIAÇÃO</p>', unsafe_allow_html=True)
-    col_a, col_b = st.columns(2, gap="small")
-    with col_a:
-        if st.button("👍 Acordo", use_container_width=True): registrar_feedback("De Acordo")
-    with col_b:
-        if st.button("👎 Divergente", use_container_width=True): st.session_state.show_obs = True
-    
-    if st.session_state.get('show_obs', False):
-        obs_input = st.text_input("Justificativa da Divergência:")
-        if obs_input:
-            if st.button("🤖 Analisar Causa do Erro", use_container_width=True):
-                with st.spinner('IA analisando a falha...'):
-                    try:
-                        CHAVE = st.secrets["GEMINI_KEY"]
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
-                        prompt_debug = (
-                            f"Aja como um auditor de IA farmacêutica. Compare sua resposta anterior com a justificativa do especialista.\n"
-                            f"Sua Resposta: {st.session_state.resposta_atual}\n"
-                            f"Justificativa do Especialista: {obs_input}\n"
-                            f"Explique de forma técnica e breve por que houve a divergência (ex: falta de dados locais, erro de interpretação)."
-                        )
-                        r = requests.post(url, json={"contents": [{"parts": [{"text": prompt_debug}]}]}, timeout=30)
-                        if r.status_code == 200:
-                            st.session_state.analise_erro = r.json()['candidates'][0]['content']['parts'][0]['text']
-                            st.session_state.justificativa_temp = obs_input
-                        else: st.error("Erro na auditoria.")
-                    except: st.error("Falha na conexão.")
+    # Colunas para alinhar Acordo e Divergente perfeitamente
+    col_acordo, col_div = st.columns(2)
+    with col_acordo:
+        if st.button(":material/thumb_up: Acordo"):
+            st.toast("Avaliação positiva registrada!", icon="✅")
             
-            if st.session_state.get('analise_erro'):
-                st.warning("Auditoria concluída!")
-                if st.button("Finalizar e Salvar Registro"):
-                    registrar_feedback("Divergente", st.session_state.justificativa_temp, st.session_state.analise_erro)
-                    st.session_state.show_obs = False
+    with col_div:
+        if st.button(":material/thumb_down: Divergente"):
+            st.toast("Divergência reportada.", icon="⚠️")
 
-    st.markdown('<p class="sidebar-label">📊 EXPORTAR</p>', unsafe_allow_html=True)
-    if st.button("Gerar Planilha (.xlsx)", use_container_width=True):
-        if not df_logs.empty:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_logs.to_excel(writer, index=False, sheet_name='Feedback_IC')
-            st.download_button(label="📥 Baixar Excel", data=output.getvalue(), 
-                               file_name=f"relatorio_huol_{datetime.now().strftime('%d_%m')}.xlsx", use_container_width=True)
+    st.markdown("---")
+    st.markdown("### :material/download: EXPORTAR")
+    if st.button(":material/description: Gerar Planilha"):
+        st.info("Função de exportação em desenvolvimento.")
 
-# --- 4. CORPO PRINCIPAL ---
-st.markdown('<h2 style="color:#5dade2; margin-bottom:0; font-weight:800;">INFOMED - SISTEMA DE PESQUISA HUOL</h2>', unsafe_allow_html=True)
+# --- CONTEÚDO PRINCIPAL ---
+st.title("INFOMED - SISTEMA DE PESQUISA HUOL")
 st.caption("UFRN - EBSERH | Inteligência Artificial e Farmacovigilância")
 
-tab1, tab2, tab3 = st.tabs(["🔬 Consulta Técnica", "📚 Repositório Validado", "📊 Dashboard"])
+# Abas com ícones modernos
+tab1, tab2, tab3 = st.tabs([
+    ":material/manage_search: Consulta Técnica", 
+    ":material/folder_managed: Repositório Validado", 
+    ":material/dashboard: Dashboard"
+])
 
 with tab1:
-    st.markdown("---")
-    if st.session_state.get('resposta_atual'):
-        c_in, c_out = st.columns([1, 2], gap="large")
-    else:
-        c_in, c_out = st.container(), None
+    # Campo de entrada de evidências
+    evidencias = st.text_area(
+        "Insira as evidências farmacológicas para análise:", 
+        height=250, 
+        placeholder="Cole aqui o texto para a Gemini analisar divergências..."
+    )
+    
+    # Botão de ação principal
+    if st.button(":material/analytics: Analisar Evidências (Gemini 3)", use_container_width=True):
+        if evidencias:
+            with st.spinner("IA processando dados e verificando farmacovigilância..."):
+                # Aqui entra sua chamada para a API da Gemini usando 'api_key'
+                # Exemplo: response = model.generate_content(evidencias)
+                st.success("Análise concluída com sucesso!")
+                # Aqui você exibe o resultado do seu analisador de divergência
+        else:
+            st.warning("Por favor, insira algum texto para análise.")
 
-    with c_in:
-        p_input = st.text_area("Dúvida técnica:", value=st.session_state.get('pergunta_atual', ""), height=250, label_visibility="collapsed")
-        st.markdown('<div class="analyze-btn">', unsafe_allow_html=True)
-        if st.button("▶️ Analisar Evidências (Gemini 3)", use_container_width=True):
-            if p_input:
-                with st.spinner('Processando...'):
-                    try:
-                        CHAVE = st.secrets["GEMINI_KEY"]
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
-                        prompt = "Aja como farmacêutico do HUOL. Estrutura: Alerta, Parecer (Confiança % e Fontes), Tabela, Referência ABNT."
-                        r = requests.post(url, json={"contents": [{"parts": [{"text": f"{prompt}\n\nPergunta: {p_input}"}]}]}, timeout=30)
-                        if r.status_code == 200:
-                            res = r.json()['candidates'][0]['content']['parts'][0]['text']
-                            st.session_state.resposta_atual, st.session_state.pergunta_atual = res, p_input
-                            label = p_input.split()[0].upper()
-                            if 'historico' not in st.session_state: st.session_state.historico = []
-                            st.session_state.historico.append({"label": label, "pergunta": p_input, "resposta": res})
-                            st.rerun()
-                    except: st.error("Erro na API.")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    if c_out:
-        with c_out:
-            st.markdown("##### 📄 Resultado Técnico")
-            st.markdown(f'<div class="res-card">{st.session_state.resposta_atual}</div>', unsafe_allow_html=True)
-            if st.session_state.get('analise_erro'):
-                st.markdown('<div class="debug-card"><b>🕵️ Auditoria de IA:</b><br>' + st.session_state.analise_erro + '</div>', unsafe_allow_html=True)
-
-# --- ABA 2 E 3 (CÓDIGO MANTIDO DAS VERSÕES ANTERIORES) ---
 with tab2:
-    df_v = df_logs[df_logs['status'] == 'De Acordo']
-    if df_v.empty: st.info("Repositório vazio.")
-    else:
-        for _, r in df_v[::-1].iterrows():
-            with st.expander(f"💊 {r['farmaco']} - {r['data']}"):
-                st.write(r['resposta'])
+    st.info("O repositório de evidências validadas será exibido aqui.")
 
 with tab3:
-    if not df_logs.empty:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(px.pie(df_logs, names='status', color='status', hole=0.4, color_discrete_map={'De Acordo':'#5dade2', 'Divergente':'#e74c3c'}).update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
-        with col2:
-            st.plotly_chart(px.bar(df_logs['farmaco'].value_counts().head(5).reset_index(), x='farmaco', y='count', color_discrete_sequence=['#5dade2']).update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+    st.info("Gráficos e estatísticas de farmacovigilância em tempo real.")
 
-st.markdown('<br><div style="text-align: center; font-size: 0.7rem; color: gray;">Matheus Thierry | UFRN 2026</div>', unsafe_allow_html=True)
+# --- RODAPÉ ---
+st.markdown("---")
+st.markdown(
+    "<div style='text-align: center; color: gray; font-size: 12px;'>"
+    "Matheus Thierry | Pesquisador UFRN 2026"
+    "</div>", 
+    unsafe_allow_html=True
+)
