@@ -139,20 +139,24 @@ tab1, tab2, tab3 = st.tabs([
 with tab1:
     evidencias = st.text_area("Insira as evidências:", height=200, placeholder="Texto para análise...")
     
-    if st.button(":material/analytics: Analisar Evidências", use_container_width=True):
+if st.button(":material/analytics: Analisar Evidências", use_container_width=True):
         if evidencias:
             with st.spinner("IA processando..."):
-                # Simulação da resposta da IA (Substitua pela sua chamada real da Gemini)
-                resultado_fake = "Análise farmacológica: Nenhuma divergência grave encontrada."
+                # --- AQUI É ONDE VOCÊ CHAMA SUA LÓGICA DA GEMINI ---
+                # Supondo que você use o SDK do google-generativeai:
+                # model = genai.GenerativeModel('gemini-1.5-flash')
+                # response = model.generate_content(evidencias)
+                # resultado_ia = response.text
+                
+                # Para testar agora, garanta que a variável abaixo receba a resposta da API:
+                resultado_ia = realizar_chamada_gemini(evidencias) # Chame sua função aqui
                 
                 # Guardamos na memória temporária para poder salvar no banco depois
-                st.session_state.ultima_analise = resultado_fake
+                st.session_state.ultima_analise = resultado_ia
                 st.session_state.texto_enviado = evidencias
                 
                 st.success("Análise concluída!")
-                st.write(resultado_fake)
-        else:
-            st.warning("Insira o texto.")
+                st.write(resultado_ia)
 
 with tab2:
     st.markdown("### :material/database: Histórico de Consultas Validadas")
