@@ -1,50 +1,76 @@
 import streamlit as st
+import sqlite3
+import pandas as pd
+from datetime import datetime
+import io
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="INFOMED - HUOL", layout="wide", page_icon="💊")
 
-# --- ESTILIZAÇÃO CSS CUSTOMIZADA ---
+# --- FUNÇÕES DO BANCO DE DATAS (SQLite) ---
+def init_db():
+    conn = sqlite3.connect('infomed_huol.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS registros 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  data TEXT, 
+                  evidencia TEXT, 
+                  resultado_ia TEXT, 
+                  avaliacao TEXT)''')
+    conn.commit()
+    conn.close()
+
+def salvar_registro(evidencia, resultado_ia, avaliacao):
+    conn = sqlite3.connect('infomed_huol.db')
+    c = conn.cursor()
+    data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    c.execute("INSERT INTO registros (data, evidencia, resultado_ia, avaliacao) VALUES (?, ?, ?, ?)",
+              (data_atual, evidencia, resultado_ia, avaliacao))
+    conn.commit()
+    conn.close()
+
+def contar_registros():
+    conn = sqlite3.connect('infomed_huol.db')
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM registros")
+    total = c.fetchone()[0]
+    conn.close()
+    return total
+
+def extrair_dados():
+    conn = sqlite3.connect('infomed_huol.db')
+    df = pd.read_sql_query("SELECT * FROM registros", conn)
+    conn.close()
+    return df
+
+# Inicializar o banco ao carregar o app
+init_db()
+
+# --- ESTILIZAÇÃO CSS ---
 st.markdown("""
     <style>
-    /* Padronização dos botões da Sidebar */
     div.stButton > button {
         width: 100%;
         border-radius: 8px;
-        background-color: #374151; /* Cinza escuro */
+        background-color: #374151;
         color: #ffffff;
         border: 1px solid #4b5563;
         height: 3em;
         transition: all 0.3s ease;
     }
-    
-    div.stButton > button:hover {
-        background-color: #1f2937; /* Cinza ainda mais escuro no hover */
-        border-color: #6b7280;
-    }
-
-    /* Ajuste de tamanho da fonte para os botões de avaliação */
-    div.stButton > button p {
-        font-size: 13px !important;
-        font-weight: 500;
-    }
-
-    /* Estilização da área de texto */
-    .stTextArea textarea {
-        border-radius: 10px;
-    }
+    div.stButton > button:hover { background-color: #1f2937; }
+    div.stButton > button p { font-size: 13px !important; font-weight: 500; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LÓGICA DE API KEY (GitHub Secrets / Local) ---
-# No GitHub, você deve ir em Settings > Secrets and Variables > Actions
-# E adicionar uma Secret chamada GEMINI_API_KEY
+# --- LÓGICA DE API KEY ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except Exception:
-    st.error("Erro: Chave de API não configurada. Verifique os Secrets do GitHub ou o arquivo .streamlit/secrets.toml")
+    st.error("Erro: Chave de API não configurada nos Secrets.")
     st.stop()
 
-# --- SIDEBAR (BARRA LATERAL) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.markdown("### :material/person_search: PESQUISADOR")
     with st.container(border=True):
@@ -53,34 +79,56 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Métrica de Registros
-    st.metric(label="Total de Registros", value="0")
+    # Contador dinâmico do banco de dados
+    total_db = contar_registros()
+    st.metric(label="Total de Registros", value=total_db)
     
     if st.button(":material/add_circle: Nova Consulta"):
         st.rerun()
 
     st.markdown("### :material/fact_check: AVALIAÇÃO")
-    
-    # Colunas para alinhar Acordo e Divergente perfeitamente
     col_acordo, col_div = st.columns(2)
+    
+    # Só permite avaliar se houver uma análise feita nesta sessão
     with col_acordo:
         if st.button(":material/thumb_up: Acordo"):
-            st.toast("Avaliação positiva registrada!", icon="✅")
+            if 'ultima_analise' in st.session_state:
+                salvar_registro(st.session_state.texto_enviado, st.session_state.ultima_analise, "Acordo")
+                st.toast("Salvo no banco de dados!", icon="✅")
+                st.rerun()
+            else:
+                st.warning("Faça uma análise primeiro.")
             
     with col_div:
         if st.button(":material/thumb_down: Divergente"):
-            st.toast("Divergência reportada.", icon="⚠️")
+            if 'ultima_analise' in st.session_state:
+                salvar_registro(st.session_state.texto_enviado, st.session_state.ultima_analise, "Divergente")
+                st.toast("Divergência registrada!", icon="⚠️")
+                st.rerun()
+            else:
+                st.warning("Faça uma análise primeiro.")
 
     st.markdown("---")
     st.markdown("### :material/download: EXPORTAR")
-    if st.button(":material/description: Gerar Planilha"):
-        st.info("Função de exportação em desenvolvimento.")
+    
+    # Lógica de Exportação para Excel
+    df_export = extrair_dados()
+    if not df_export.empty:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_export.to_excel(writer, index=False, sheet_name='Registros')
+        processed_data = output.getvalue()
+        st.download_button(
+            label=":material/description: Baixar Planilha (.xlsx)",
+            data=processed_data,
+            file_name=f'infomed_huol_{datetime.now().strftime("%Y%m%d")}.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
 
 # --- CONTEÚDO PRINCIPAL ---
 st.title("INFOMED - SISTEMA DE PESQUISA HUOL")
 st.caption("UFRN - EBSERH | Inteligência Artificial e Farmacovigilância")
 
-# Abas com ícones modernos
 tab1, tab2, tab3 = st.tabs([
     ":material/manage_search: Consulta Técnica", 
     ":material/folder_managed: Repositório Validado", 
@@ -88,35 +136,30 @@ tab1, tab2, tab3 = st.tabs([
 ])
 
 with tab1:
-    # Campo de entrada de evidências
-    evidencias = st.text_area(
-        "Insira as evidências farmacológicas para análise:", 
-        height=250, 
-        placeholder="Cole aqui o texto para a Gemini analisar divergências..."
-    )
+    evidencias = st.text_area("Insira as evidências:", height=200, placeholder="Texto para análise...")
     
-    # Botão de ação principal
-    if st.button(":material/analytics: Analisar Evidências (Gemini 3)", use_container_width=True):
+    if st.button(":material/analytics: Analisar Evidências", use_container_width=True):
         if evidencias:
-            with st.spinner("IA processando dados e verificando farmacovigilância..."):
-                # Aqui entra sua chamada para a API da Gemini usando 'api_key'
-                # Exemplo: response = model.generate_content(evidencias)
-                st.success("Análise concluída com sucesso!")
-                # Aqui você exibe o resultado do seu analisador de divergência
+            with st.spinner("IA processando..."):
+                # Simulação da resposta da IA (Substitua pela sua chamada real da Gemini)
+                resultado_fake = "Análise farmacológica: Nenhuma divergência grave encontrada."
+                
+                # Guardamos na memória temporária para poder salvar no banco depois
+                st.session_state.ultima_analise = resultado_fake
+                st.session_state.texto_enviado = evidencias
+                
+                st.success("Análise concluída!")
+                st.write(resultado_fake)
         else:
-            st.warning("Por favor, insira algum texto para análise.")
+            st.warning("Insira o texto.")
 
 with tab2:
-    st.info("O repositório de evidências validadas será exibido aqui.")
+    st.markdown("### Histórico de Consultas")
+    st.dataframe(extrair_dados(), use_container_width=True)
 
 with tab3:
-    st.info("Gráficos e estatísticas de farmacovigilância em tempo real.")
-
-# --- RODAPÉ ---
-st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: gray; font-size: 12px;'>"
-    "Matheus Thierry | Pesquisador UFRN 2026"
-    "</div>", 
-    unsafe_allow_html=True
-)
+    if not df_export.empty:
+        st.subheader("Estatísticas de Avaliação")
+        st.bar_chart(df_export['avaliacao'].value_counts())
+    else:
+        st.info("Aguardando dados para gerar gráficos.")
