@@ -39,7 +39,8 @@ def contar_registros():
 
 def extrair_dados():
     conn = sqlite3.connect('infomed_huol.db')
-    df = pd.read_sql_query("SELECT * FROM registros", conn)
+    # Ordena pelo ID de forma decrescente para mostrar o mais recente primeiro
+    df = pd.read_sql_query("SELECT id, data, evidencia, resultado_ia, avaliacao FROM registros ORDER BY id DESC", conn)
     conn.close()
     return df
 
@@ -154,8 +155,39 @@ with tab1:
             st.warning("Insira o texto.")
 
 with tab2:
-    st.markdown("### Histórico de Consultas")
-    st.dataframe(extrair_dados(), use_container_width=True)
+    st.markdown("### :material/database: Histórico de Consultas Validadas")
+    
+    dados_repositorio = extrair_dados()
+    
+    if not dados_repositorio.empty:
+        # Configuração avançada da tabela (st.column_config)
+        st.dataframe(
+            dados_repositorio,
+            use_container_width=True,
+            hide_index=True, # Esconde a coluna de índice do pandas
+            column_config={
+                "id": st.column_config.NumberColumn("Ref.", width="small"),
+                "data": st.column_config.TextColumn("Data/Hora", width="medium"),
+                "evidencia": st.column_config.TextColumn("Texto Submetido", width="large"),
+                "resultado_ia": st.column_config.TextColumn("Análise da Gemini", width="large"),
+                "avaliacao": st.column_config.SelectboxColumn(
+                    "Status",
+                    options=["Acordo", "Divergente"],
+                    width="medium",
+                )
+            }
+        )
+        
+        # Resumo rápido abaixo da tabela
+        col_res1, col_res2 = st.columns(2)
+        acordos = len(dados_repositorio[dados_repositorio['avaliacao'] == 'Acordo'])
+        divergentes = len(dados_repositorio[dados_repositorio['avaliacao'] == 'Divergente'])
+        
+        col_res1.info(f"✅ **Acordos:** {acordos}")
+        col_res2.warning(f"⚠️ **Divergências:** {divergentes}")
+        
+    else:
+        st.info("O repositório ainda está vazio. Realize uma análise na aba 'Consulta Técnica'.")
 
 with tab3:
     if not df_export.empty:
