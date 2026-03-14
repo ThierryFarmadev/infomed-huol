@@ -17,10 +17,12 @@ def iniciar_db():
     conn.close()
 
 def contar_registros():
-    conn = sqlite3.connect('feedback_ic.db')
-    df = pd.read_sql_query("SELECT id FROM avaliacoes", conn)
-    conn.close()
-    return len(df)
+    try:
+        conn = sqlite3.connect('feedback_ic.db')
+        df = pd.read_sql_query("SELECT id FROM avaliacoes", conn)
+        conn.close()
+        return len(df)
+    except: return 0
 
 def registrar_feedback(status, obs=""):
     if st.session_state.get('resposta_atual'):
@@ -51,7 +53,6 @@ st.markdown("""
     
     .sidebar-label { color: #5dade2; font-weight: 700; font-size: 0.8rem; margin-top: 25px; text-transform: uppercase; letter-spacing: 1px; }
     
-    /* Card de Resposta Estilo 'Paper' Dark */
     .res-card { 
         background: #1c1f26; 
         padding: 30px; 
@@ -62,7 +63,6 @@ st.markdown("""
         line-height: 1.8;
     }
 
-    /* Botão Analisar */
     div.stButton > button:first-child {
         background-color: #004a87 !important;
         color: white !important;
@@ -72,8 +72,8 @@ st.markdown("""
         border: none !important;
     }
     
-    /* Ajuste dos botões de Feedback para não quebrar */
-    .stButton button { font-size: 0.8rem !important; }
+    /* Forçar altura fixa nos botões do histórico para manter simetria */
+    .stButton button { font-size: 0.8rem !important; min-height: 40px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -82,7 +82,6 @@ with st.sidebar:
     st.markdown("### 🔬 PESQUISADOR")
     st.info(f"**Matheus Thierry**\n\nUFRN / HUOL")
     
-    # Dashboard Simples
     total_consultas = contar_registros()
     st.metric("Consultas Salvas", total_consultas)
 
@@ -98,7 +97,7 @@ with st.sidebar:
         if st.button("👎 Divergente", use_container_width=True): st.session_state.show_obs = True
     
     if st.session_state.get('show_obs', False):
-        obs = st.text_input("Justificativa da Divergência:")
+        obs = st.text_input("Justificativa:")
         if st.button("Confirmar Registro"):
             registrar_feedback("Divergente", obs)
             st.session_state.show_obs = False
@@ -115,9 +114,15 @@ with st.sidebar:
             st.download_button(label="📥 Baixar Excel", data=output.getvalue(), 
                                file_name=f"relatorio_huol_{datetime.now().strftime('%d_%m')}.xlsx", use_container_width=True)
 
+    # --- NOVO: BARRA DE BUSCA E HISTÓRICO ---
     st.markdown('<p class="sidebar-label">📂 HISTÓRICO</p>', unsafe_allow_html=True)
+    busca = st.text_input("🔍 Buscar no histórico", placeholder="Ex: Vancomicina", label_visibility="collapsed")
+    
     if 'historico' in st.session_state:
-        for idx, item in enumerate(reversed(st.session_state.historico)):
+        # Filtra os itens baseado na busca (case insensitive)
+        historico_filtrado = [h for h in st.session_state.historico if busca.upper() in h['label'].upper()]
+        
+        for idx, item in enumerate(reversed(historico_filtrado)):
             if st.button(f"📄 {item['label']}", key=f"h_{idx}", use_container_width=True):
                 st.session_state.pergunta_atual, st.session_state.resposta_atual = item['pergunta'], item['resposta']
                 st.rerun()
@@ -135,18 +140,23 @@ else:
 
 with col_input:
     st.markdown("##### 📝 Entrada de Dados")
-    p_input = st.text_area("", value=st.session_state.get('pergunta_atual', ""), 
+    p_input = st.text_area("Digite sua dúvida técnica:", 
+                           value=st.session_state.get('pergunta_atual', ""), 
                            placeholder="Identifique o fármaco e a dúvida técnica...", 
                            height=280, label_visibility="collapsed")
     
     if st.button("▶️ Analisar Evidências"):
         if p_input:
             with st.spinner('Acessando literaturas científicas...'):
-                CHAVE = st.secrets["GEMINI_KEY"]
-                print(st.secrets)
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
+                # Prioriza a chave dos Secrets, se não existir, usa a string direta
                 try:
-                    # PROMPT REFINADO PARA ABNT
+                    CHAVE = st.secrets["GEMINI_KEY"]
+                except:
+                    CHAVE = "AIzaSyDuiS_2MNrmFz5_Kz7j_c3Sp9exDsMA1Vs"
+                
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={CHAVE}"
+                
+                try:
                     prompt_eng = (
                         "Aja como farmacêutico clínico do HUOL. "
                         "Estrutura: 1. Alerta, 2. Parecer Técnico (com Nível de Confiança %), "
@@ -162,6 +172,8 @@ with col_input:
                         if not any(h['pergunta'] == p_input for h in st.session_state.historico):
                             st.session_state.historico.append({"label": label, "pergunta": p_input, "resposta": res})
                         st.rerun()
+                    else:
+                        st.error(f"Erro na API: {data.get('error', {}).get('message', 'Erro desconhecido')}")
                 except Exception as e: st.error(f"Erro: {e}")
 
 if col_output and st.session_state.get('resposta_atual'):
@@ -169,6 +181,5 @@ if col_output and st.session_state.get('resposta_atual'):
         st.markdown("##### 📄 Resultado Técnico")
         st.markdown(f'<div class="res-card">{st.session_state.resposta_atual}</div>', unsafe_allow_html=True)
         st.download_button("📥 Baixar Parecer (.txt)", st.session_state.resposta_atual, file_name="analise.txt")
-
 
 st.markdown('<br><div style="font-size: 0.75rem; color: #5c6370; text-align: center;">Projeto de Iniciação Científica - Matheus Thierry / UFRN 2026.</div>', unsafe_allow_html=True)
