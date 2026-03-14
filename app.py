@@ -33,7 +33,6 @@ def registrar_feedback(status, obs=""):
             c = conn.cursor()
             data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             farmaco_label = st.session_state.pergunta_atual.split()[0].upper()
-            # Limpeza básica para o Excel
             texto_excel = st.session_state.resposta_atual.replace("**", "").replace("#", "").replace("`", "")
             texto_excel = " ".join(texto_excel.splitlines()) 
             c.execute("INSERT INTO avaliacoes (data, farmaco, pergunta, resposta, status, observacao) VALUES (?,?,?,?,?,?)",
@@ -45,15 +44,45 @@ def registrar_feedback(status, obs=""):
 
 iniciar_db()
 
-# --- 2. CSS PARA DESIGN DARK (HUOL) ---
+# --- 2. CSS PARA DESIGN REFINADO (CINZA ESCURO) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; background-color: #0e1117; }
+    
     .sidebar-label { color: #5dade2; font-weight: 700; font-size: 0.8rem; margin-top: 25px; text-transform: uppercase; letter-spacing: 1px; }
     .res-card { background: #1c1f26; padding: 30px; border-radius: 12px; border: 1px solid #30363d; color: #e6edf3; line-height: 1.8; }
-    div.stButton > button:first-child { background-color: #004a87 !important; color: white !important; font-weight: 700 !important; border-radius: 8px !important; }
-    .stButton button { font-size: 0.8rem !important; min-height: 40px !important; }
+    
+    /* ESTILO DOS BOTÕES PRINCIPAIS E SIDEBAR (CINZA ESCURO) */
+    div.stButton > button {
+        background-color: #2d333b !important; /* Cinza Escuro Distinto */
+        color: #adb5bd !important; /* Letra Cinza Escura para combinar */
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        border: 1px solid #444c56 !important;
+        transition: all 0.3s ease;
+    }
+
+    div.stButton > button:hover {
+        background-color: #373e47 !important;
+        border-color: #5dade2 !important;
+        color: #5dade2 !important;
+    }
+
+    /* BOTÕES DE AVALIAÇÃO (MENORES E ALINHADOS) */
+    .eval-btn button {
+        font-size: 0.7rem !important;
+        padding: 0.4rem 0.2rem !important;
+        min-height: 35px !important;
+    }
+
+    /* BOTÃO ANALISAR (DESTAQUE SUTIL) */
+    .analyze-btn button {
+        background-color: #2d333b !important;
+        color: #5dade2 !important; /* Texto em azul para destacar a ação principal */
+        border: 1px solid #5dade2 !important;
+        font-size: 0.9rem !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -70,9 +99,13 @@ with st.sidebar:
     st.markdown('<p class="sidebar-label">✅ AVALIAÇÃO</p>', unsafe_allow_html=True)
     col_a, col_b = st.columns(2, gap="small")
     with col_a:
+        st.markdown('<div class="eval-btn">', unsafe_allow_html=True)
         if st.button("👍 Acordo", use_container_width=True): registrar_feedback("De Acordo")
+        st.markdown('</div>', unsafe_allow_html=True)
     with col_b:
+        st.markdown('<div class="eval-btn">', unsafe_allow_html=True)
         if st.button("👎 Divergente", use_container_width=True): st.session_state.show_obs = True
+        st.markdown('</div>', unsafe_allow_html=True)
     
     if st.session_state.get('show_obs', False):
         obs = st.text_input("Justificativa:")
@@ -108,7 +141,6 @@ st.markdown('<h2 style="color:#5dade2; margin-bottom:0; font-weight:800;">INFOME
 st.caption("UFRN - EBSERH | Suporte à Decisão Farmacêutica")
 st.markdown("---")
 
-# Layout dinâmico: se houver resposta, divide a tela
 if st.session_state.get('resposta_atual'):
     col_input, col_output = st.columns([1, 2], gap="large")
 else:
@@ -121,7 +153,8 @@ with col_input:
                            placeholder="Ex: Vancomicina - Estabilidade após reconstituição...", 
                            height=280, label_visibility="collapsed")
     
-    if st.button("▶️ Analisar Evidências"):
+    st.markdown('<div class="analyze-btn">', unsafe_allow_html=True)
+    if st.button("▶️ Analisar Evidências", use_container_width=True):
         if p_input:
             with st.spinner('Acessando literaturas (Gemini 3)...'):
                 try:
@@ -129,7 +162,6 @@ with col_input:
                 except:
                     CHAVE = "AIzaSyCOhKK1vnm98_UUD63X2UZNPYUhmfwWOeE"
                 
-                # URL ATUALIZADA PARA GEMINI 3 FLASH PREVIEW
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
                 
                 try:
@@ -142,21 +174,20 @@ with col_input:
                         res = data['candidates'][0]['content']['parts'][0]['text']
                         st.session_state.resposta_atual, st.session_state.pergunta_atual = res, p_input
                         
-                        # Adiciona ao histórico
                         label = p_input.split()[0].upper()
                         if 'historico' not in st.session_state: st.session_state.historico = []
                         if not any(h['pergunta'] == p_input for h in st.session_state.historico):
                             st.session_state.historico.append({"label": label, "pergunta": p_input, "resposta": res})
                         st.rerun()
                     else:
-                        erro_msg = data.get('error', {}).get('message', 'Erro desconhecido na API')
-                        st.error(f"Erro na API 2026: {erro_msg}")
+                        st.error(f"Erro na API 2026: {data.get('error', {}).get('message', 'Erro desconhecido')}")
                 except Exception as e: st.error(f"Erro de conexão: {e}")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 if col_output:
     with col_output:
         st.markdown("##### 📄 Resultado Técnico")
         st.markdown(f'<div class="res-card">{st.session_state.resposta_atual}</div>', unsafe_allow_html=True)
-        st.download_button("📥 Baixar Parecer (.txt)", st.session_state.resposta_atual, file_name="parecer_tecnico.txt")
+        st.download_button("📥 Baixar Parecer (.txt)", st.session_state.resposta_atual, file_name="parecer_tecnico.txt", use_container_width=True)
 
 st.markdown('<br><div style="font-size: 0.75rem; color: #5c6370; text-align: center;">Projeto de Iniciação Científica - Matheus Thierry / UFRN 2026.</div>', unsafe_allow_html=True)
