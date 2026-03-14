@@ -5,7 +5,9 @@ import pandas as pd
 import io
 from datetime import datetime
 
-# --- 1. BANCO DE DADOS E ESTATÍSTICAS ---
+# --- 1. CONFIGURAÇÃO E BANCO DE DADOS ---
+st.set_page_config(page_title="INFOMED - HUOL", page_icon="🏥", layout="wide")
+
 def iniciar_db():
     conn = sqlite3.connect('feedback_ic.db')
     c = conn.cursor()
@@ -31,59 +33,35 @@ def registrar_feedback(status, obs=""):
             c = conn.cursor()
             data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             farmaco_label = st.session_state.pergunta_atual.split()[0].upper()
+            # Limpeza básica para o Excel
             texto_excel = st.session_state.resposta_atual.replace("**", "").replace("#", "").replace("`", "")
             texto_excel = " ".join(texto_excel.splitlines()) 
             c.execute("INSERT INTO avaliacoes (data, farmaco, pergunta, resposta, status, observacao) VALUES (?,?,?,?,?,?)",
                       (data_atual, farmaco_label, st.session_state.pergunta_atual, texto_excel, status, obs))
             conn.commit()
             conn.close()
-            st.toast(f"✅ Feedback '{status}' registrado!", icon="💾")
-        except Exception as e:
-            st.error(f"Erro ao salvar: {e}")
+            st.toast(f"✅ Feedback registrado!", icon="💾")
+        except Exception as e: st.error(f"Erro ao salvar: {e}")
 
 iniciar_db()
 
-# --- 2. ESTILO CSS CUSTOMIZADO ---
-st.set_page_config(page_title="INFOMED - HUOL", page_icon="🏥", layout="wide")
-
+# --- 2. CSS PARA DESIGN DARK (HUOL) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; background-color: #0e1117; }
-    
     .sidebar-label { color: #5dade2; font-weight: 700; font-size: 0.8rem; margin-top: 25px; text-transform: uppercase; letter-spacing: 1px; }
-    
-    .res-card { 
-        background: #1c1f26; 
-        padding: 30px; 
-        border-radius: 12px; 
-        border: 1px solid #30363d; 
-        color: #e6edf3;
-        font-size: 1.05rem;
-        line-height: 1.8;
-    }
-
-    div.stButton > button:first-child {
-        background-color: #004a87 !important;
-        color: white !important;
-        font-weight: 700 !important;
-        padding: 0.6rem 2rem !important;
-        border-radius: 8px !important;
-        border: none !important;
-    }
-    
-    /* Forçar altura fixa nos botões do histórico para manter simetria */
+    .res-card { background: #1c1f26; padding: 30px; border-radius: 12px; border: 1px solid #30363d; color: #e6edf3; line-height: 1.8; }
+    div.stButton > button:first-child { background-color: #004a87 !important; color: white !important; font-weight: 700 !important; border-radius: 8px !important; }
     .stButton button { font-size: 0.8rem !important; min-height: 40px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. SIDEBAR ---
+# --- 3. SIDEBAR (CONTROLES) ---
 with st.sidebar:
     st.markdown("### 🔬 PESQUISADOR")
     st.info(f"**Matheus Thierry**\n\nUFRN / HUOL")
-    
-    total_consultas = contar_registros()
-    st.metric("Consultas Salvas", total_consultas)
+    st.metric("Consultas Salvas", contar_registros())
 
     if st.button("➕ Nova Consulta", use_container_width=True):
         st.session_state.pergunta_atual, st.session_state.resposta_atual = "", ""
@@ -114,15 +92,13 @@ with st.sidebar:
             st.download_button(label="📥 Baixar Excel", data=output.getvalue(), 
                                file_name=f"relatorio_huol_{datetime.now().strftime('%d_%m')}.xlsx", use_container_width=True)
 
-    # --- NOVO: BARRA DE BUSCA E HISTÓRICO ---
+    # --- HISTÓRICO COM BUSCA ---
     st.markdown('<p class="sidebar-label">📂 HISTÓRICO</p>', unsafe_allow_html=True)
-    busca = st.text_input("🔍 Buscar no histórico", placeholder="Ex: Vancomicina", label_visibility="collapsed")
+    busca = st.text_input("🔍 Buscar...", placeholder="Ex: Vancomicina", label_visibility="collapsed")
     
     if 'historico' in st.session_state:
-        # Filtra os itens baseado na busca (case insensitive)
-        historico_filtrado = [h for h in st.session_state.historico if busca.upper() in h['label'].upper()]
-        
-        for idx, item in enumerate(reversed(historico_filtrado)):
+        hist_filtrado = [h for h in st.session_state.historico if busca.upper() in h['label'].upper()]
+        for idx, item in enumerate(reversed(hist_filtrado)):
             if st.button(f"📄 {item['label']}", key=f"h_{idx}", use_container_width=True):
                 st.session_state.pergunta_atual, st.session_state.resposta_atual = item['pergunta'], item['resposta']
                 st.rerun()
@@ -132,54 +108,55 @@ st.markdown('<h2 style="color:#5dade2; margin-bottom:0; font-weight:800;">INFOME
 st.caption("UFRN - EBSERH | Suporte à Decisão Farmacêutica")
 st.markdown("---")
 
+# Layout dinâmico: se houver resposta, divide a tela
 if st.session_state.get('resposta_atual'):
     col_input, col_output = st.columns([1, 2], gap="large")
 else:
-    col_input = st.container()
-    col_output = None
+    col_input, col_output = st.container(), None
 
 with col_input:
     st.markdown("##### 📝 Entrada de Dados")
     p_input = st.text_area("Digite sua dúvida técnica:", 
                            value=st.session_state.get('pergunta_atual', ""), 
-                           placeholder="Identifique o fármaco e a dúvida técnica...", 
+                           placeholder="Ex: Vancomicina - Estabilidade após reconstituição...", 
                            height=280, label_visibility="collapsed")
     
     if st.button("▶️ Analisar Evidências"):
         if p_input:
-            with st.spinner('Acessando literaturas científicas...'):
-                # Prioriza a chave dos Secrets, se não existir, usa a string direta
+            with st.spinner('Acessando literaturas (Gemini 3)...'):
                 try:
                     CHAVE = st.secrets["GEMINI_KEY"]
                 except:
                     CHAVE = "AIzaSyCOhKK1vnm98_UUD63X2UZNPYUhmfwWOeE"
                 
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={CHAVE}"
+                # URL ATUALIZADA PARA GEMINI 3 FLASH PREVIEW
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
                 
                 try:
-                    prompt_eng = (
-                        "Aja como farmacêutico clínico do HUOL. "
-                        "Estrutura: 1. Alerta, 2. Parecer Técnico (com Nível de Confiança %), "
-                        "3. Tabela de Parâmetros, 4. Referência Bibliográfica no padrão ABNT."
-                    )
-                    r = requests.post(url, json={"contents": [{"parts": [{"text": f"{prompt_eng}\n\nPergunta: {p_input}"}]}]})
+                    prompt = "Aja como farmacêutico do HUOL. Estrutura: Alerta, Parecer (Confiança % e Fontes), Tabela, Referência ABNT."
+                    payload = {"contents": [{"parts": [{"text": f"{prompt}\n\nPergunta: {p_input}"}]}]}
+                    r = requests.post(url, json=payload, timeout=30)
                     data = r.json()
-                    if 'candidates' in data:
+                    
+                    if r.status_code == 200 and 'candidates' in data:
                         res = data['candidates'][0]['content']['parts'][0]['text']
                         st.session_state.resposta_atual, st.session_state.pergunta_atual = res, p_input
+                        
+                        # Adiciona ao histórico
                         label = p_input.split()[0].upper()
                         if 'historico' not in st.session_state: st.session_state.historico = []
                         if not any(h['pergunta'] == p_input for h in st.session_state.historico):
                             st.session_state.historico.append({"label": label, "pergunta": p_input, "resposta": res})
                         st.rerun()
                     else:
-                        st.error(f"Erro na API: {data.get('error', {}).get('message', 'Erro desconhecido')}")
-                except Exception as e: st.error(f"Erro: {e}")
+                        erro_msg = data.get('error', {}).get('message', 'Erro desconhecido na API')
+                        st.error(f"Erro na API 2026: {erro_msg}")
+                except Exception as e: st.error(f"Erro de conexão: {e}")
 
-if col_output and st.session_state.get('resposta_atual'):
+if col_output:
     with col_output:
         st.markdown("##### 📄 Resultado Técnico")
         st.markdown(f'<div class="res-card">{st.session_state.resposta_atual}</div>', unsafe_allow_html=True)
-        st.download_button("📥 Baixar Parecer (.txt)", st.session_state.resposta_atual, file_name="analise.txt")
+        st.download_button("📥 Baixar Parecer (.txt)", st.session_state.resposta_atual, file_name="parecer_tecnico.txt")
 
 st.markdown('<br><div style="font-size: 0.75rem; color: #5c6370; text-align: center;">Projeto de Iniciação Científica - Matheus Thierry / UFRN 2026.</div>', unsafe_allow_html=True)
