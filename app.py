@@ -8,7 +8,7 @@ import plotly.express as px
 from datetime import datetime
 
 # --- 1. CONFIGURAÇÃO E BANCO DE DADOS ---
-st.set_page_config(page_title="INFOMED - HUOL", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="INFOMED - HUOL", page_icon=":material/local_hospital:", layout="wide")
 
 def iniciar_db():
     conn = sqlite3.connect('feedback_ic.db')
@@ -41,15 +41,15 @@ def registrar_feedback(status, obs="", analise=""):
                       (data_atual, farmaco_label, st.session_state.pergunta_atual, texto_excel, status, obs, analise))
             conn.commit()
             conn.close()
-            st.toast(f"✅ Registro salvo com sucesso!", icon="💾")
+            st.toast("Registro salvo com sucesso!", icon=":material/save:")
             st.rerun()
-        except Exception as e: st.error(f"Erro ao salvar: {e}")
+        except Exception as e: st.error(f"Erro ao salvar: {e}", icon=":material/error:")
 
-# Função centralizada para chamar a API
 def consultar_gemini(prompt_completo):
     try:
         if "GEMINI_KEY" in st.secrets:
             CHAVE = st.secrets["GEMINI_KEY"]
+            # MODELO BLINDADO CONFORME INSTRUÇÃO (Não alterar)
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
             payload = {"contents": [{"parts": [{"text": prompt_completo}]}]}
             r = requests.post(url, json=payload, timeout=40)
@@ -80,52 +80,57 @@ st.markdown("""
 # --- 3. SIDEBAR ---
 df_logs = carregar_dados()
 with st.sidebar:
-    st.markdown("### 🔬 PESQUISADOR")
-    st.info(f"**Matheus Thierry**\n\nUFRN / HUOL")
+    st.markdown("### :material/science: PESQUISADOR")
+    st.info(f"**Matheus Thierry**\n\nUFRN / HUOL", icon=":material/person:")
     st.metric("Total de Registros", len(df_logs))
 
-    if st.button("➕ Nova Consulta", use_container_width=True):
+    if st.button(":material/add: Nova Consulta", use_container_width=True):
         st.session_state.pergunta_atual, st.session_state.resposta_atual, st.session_state.analise_erro = "", "", ""
         st.rerun()
     
-    st.markdown('<p class="sidebar-label">✅ AVALIAÇÃO</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sidebar-label">:material/fact_check: AVALIAÇÃO</p>', unsafe_allow_html=True)
     col_a, col_b = st.columns(2, gap="small")
     with col_a:
-        if st.button("👍 Acordo", use_container_width=True): registrar_feedback("De Acordo")
+        if st.button(":material/thumb_up: Acordo", use_container_width=True): registrar_feedback("De Acordo")
     with col_b:
-        if st.button("👎 Divergente", use_container_width=True): st.session_state.show_obs = True
+        if st.button(":material/thumb_down: Divergente", use_container_width=True): st.session_state.show_obs = True
     
     if st.session_state.get('show_obs', False):
         obs_input = st.text_input("Justificativa:")
         if obs_input:
-            if st.button("🤖 Analisar Causa do Erro", use_container_width=True):
+            if st.button(":material/smart_toy: Analisar Causa do Erro", use_container_width=True):
                 with st.spinner('IA analisando a falha...'):
                     prompt_debug = f"Compare sua resposta com a justificativa do especialista. Resposta: {st.session_state.resposta_atual}. Justificativa: {obs_input}. Explique a causa da divergência."
                     analise, erro = consultar_gemini(prompt_debug)
                     if analise:
                         st.session_state.analise_erro = analise
                         st.session_state.justificativa_temp = obs_input
-                    else: st.error(erro)
+                    else: st.error(erro, icon=":material/error:")
             
             if st.session_state.get('analise_erro'):
-                if st.button("Finalizar e Salvar"):
+                if st.button(":material/save: Finalizar e Salvar"):
                     registrar_feedback("Divergente", st.session_state.justificativa_temp, st.session_state.analise_erro)
                     st.session_state.show_obs = False
 
-    st.markdown('<p class="sidebar-label">📊 EXPORTAR</p>', unsafe_allow_html=True)
-    if st.button("Gerar Planilha (.xlsx)", use_container_width=True):
+    st.markdown('<p class="sidebar-label">:material/file_download: EXPORTAR</p>', unsafe_allow_html=True)
+    if st.button(":material/table_view: Gerar Planilha (.xlsx)", use_container_width=True):
         if not df_logs.empty:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_logs.to_excel(writer, index=False, sheet_name='Feedback_IC')
-            st.download_button(label="📥 Baixar Excel", data=output.getvalue(), file_name=f"relatorio_huol_{datetime.now().strftime('%d_%m')}.xlsx", use_container_width=True)
+            st.download_button(label="Baixar Excel", data=output.getvalue(), file_name=f"relatorio_huol_{datetime.now().strftime('%d_%m')}.xlsx", use_container_width=True, icon=":material/download:")
 
 # --- 4. CORPO PRINCIPAL ---
 st.markdown('<h2 style="color:#5dade2; margin-bottom:0; font-weight:800;">INFOMED - SISTEMA DE PESQUISA HUOL</h2>', unsafe_allow_html=True)
 st.caption("UFRN - EBSERH | Inteligência Artificial e Farmacovigilância")
 
-# Abas com ícones mais discretos
-tab1, tab2, tab3, tab4 = st.tabs(["🔍 Consulta Estruturada", "🔄 Processamento em Lote", "📚 Repositório", "📊 Dashboard"])
+# Abas com Material Icons Nativos
+tab1, tab2, tab3, tab4 = st.tabs([
+    ":material/manage_search: Consulta Estruturada", 
+    ":material/batch_prediction: Processamento em Lote", 
+    ":material/library_books: Repositório", 
+    ":material/query_stats: Dashboard"
+])
 
 # --- ABA 1: CONSULTA ESTRUTURADA ---
 with tab1:
@@ -139,10 +144,9 @@ with tab1:
         c_input = st.text_input("Perfil do Paciente (Opcional):", placeholder="Ex: Adulto, sem comorbidades")
         
         st.markdown('<div class="analyze-btn">', unsafe_allow_html=True)
-        # Botão sem emojis chamativos, foco na ação
-        if st.button("Analisar Evidências (Gemini 3)", use_container_width=True):
+        if st.button(":material/play_arrow: Gerar Parecer Estruturado", use_container_width=True):
             if f_input and p_input:
-                with st.spinner('Construindo evidências (Gemini 3)...'):
+                with st.spinner('Construindo evidências...'):
                     contexto_paciente = f"Perfil do Paciente: {c_input}" if c_input else "Perfil do Paciente: Não especificado ou padrão adulto."
                     prompt_base = (
                         "Aja como farmacêutico clínico do HUOL. Estrutura obrigatória: 1. Alerta de Segurança, 2. Parecer Técnico (com % de Confiança), 3. Tabela Resumo, 4. Referência ABNT.\n\n"
@@ -158,9 +162,9 @@ with tab1:
                         st.session_state.farmaco_atual = f_input.upper()
                         st.rerun()
                     else:
-                        st.error(erro)
+                        st.error(erro, icon=":material/warning:")
             else:
-                st.warning("Preencha ao menos o Fármaco e a Dúvida Técnica.")
+                st.warning("Preencha ao menos o Fármaco e a Dúvida Técnica.", icon=":material/warning:")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
@@ -168,15 +172,15 @@ with tab1:
         if st.session_state.get('resposta_atual'):
             st.markdown(f'<div class="res-card">{st.session_state.resposta_atual}</div>', unsafe_allow_html=True)
             if st.session_state.get('analise_erro'):
-                st.markdown('<div class="debug-card"><b>🕵️ Auditoria de IA:</b><br>' + st.session_state.analise_erro + '</div>', unsafe_allow_html=True)
+                st.markdown('<div class="debug-card"><b>:material/policy: Auditoria de IA:</b><br>' + st.session_state.analise_erro + '</div>', unsafe_allow_html=True)
         else:
-            st.info("Preencha os dados e clique em Analisar Evidências para visualizar os resultados aqui.")
+            st.info("Preencha os dados e clique em Gerar Parecer para visualizar as evidências aqui.", icon=":material/info:")
 
 # --- ABA 2: PROCESSAMENTO EM LOTE ---
 with tab2:
     st.markdown("---")
     st.markdown("### Processamento Automático de Planilhas")
-    st.info("Suba um arquivo Excel (.xlsx) contendo uma coluna exatamente com o nome **Pergunta**. O sistema irá processar todas as linhas e gerar um arquivo para download.")
+    st.info("Suba um arquivo Excel (.xlsx) contendo uma coluna exatamente com o nome **Pergunta**. O sistema irá processar todas as linhas e gerar um arquivo para download.", icon=":material/lightbulb:")
     
     arquivo_upload = st.file_uploader("Selecione sua planilha de testes", type=['xlsx'])
     
@@ -184,10 +188,10 @@ with tab2:
         try:
             df_lote = pd.read_excel(arquivo_upload)
             if 'Pergunta' not in df_lote.columns:
-                st.error("Aviso: A planilha precisa ter uma coluna chamada 'Pergunta'.")
+                st.error("Aviso: A planilha precisa ter uma coluna chamada 'Pergunta'.", icon=":material/error:")
             else:
-                st.success(f"Planilha carregada com sucesso! {len(df_lote)} itens encontrados.")
-                if st.button("Iniciar Processamento em Lote"):
+                st.success(f"Planilha carregada com sucesso! {len(df_lote)} itens encontrados.", icon=":material/check_circle:")
+                if st.button(":material/rocket_launch: Iniciar Processamento em Lote"):
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     respostas_lote = []
@@ -209,25 +213,25 @@ with tab2:
                         time.sleep(2) 
                     
                     df_lote['Resposta_IA'] = respostas_lote
-                    df_lote['Avaliacao_Pesquisador'] = ""
+                    df_lote['Avaliacao_Pesquisador'] = "" 
                     
                     output_lote = io.BytesIO()
                     with pd.ExcelWriter(output_lote, engine='openpyxl') as writer:
                         df_lote.to_excel(writer, index=False, sheet_name='Resultados_IA')
                     
-                    status_text.text("✅ Processamento concluído!")
-                    st.download_button(label="Baixar Resultados do Lote", data=output_lote.getvalue(), file_name=f"lote_processado_{datetime.now().strftime('%d_%m')}.xlsx")
+                    status_text.text("Processamento concluído!")
+                    st.download_button(label="Baixar Resultados do Lote", data=output_lote.getvalue(), file_name=f"lote_processado_{datetime.now().strftime('%d_%m')}.xlsx", icon=":material/download:")
         except Exception as e:
-            st.error(f"Erro ao ler arquivo: {e}")
+            st.error(f"Erro ao ler arquivo: {e}", icon=":material/error:")
 
-# --- ABA 3 E 4 (Mantidos Iguais) ---
+# --- ABA 3 E 4 ---
 with tab3:
     st.markdown("---")
     df_v = df_logs[df_logs['status'] == 'De Acordo']
-    if df_v.empty: st.info("Repositório vazio. Valide respostas para populá-lo.")
+    if df_v.empty: st.info("Repositório vazio. Valide respostas para populá-lo.", icon=":material/inbox:")
     else:
         for _, r in df_v[::-1].iterrows():
-            with st.expander(f"💊 {r['farmaco']} - {r['data']}"):
+            with st.expander(f":material/medication: {r['farmaco']} - {r['data']}"):
                 st.write(r['resposta'])
 
 with tab4:
@@ -239,6 +243,6 @@ with tab4:
         with col2:
             st.plotly_chart(px.bar(df_logs['farmaco'].value_counts().head(5).reset_index(), x='farmaco', y='count', color_discrete_sequence=['#5dade2']).update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
     else:
-        st.warning("Sem dados para exibir estatísticas.")
+        st.warning("Sem dados para exibir estatísticas.", icon=":material/warning:")
 
 st.markdown('<br><div style="text-align: center; font-size: 0.7rem; color: gray;">Matheus Thierry | Pesquisador UFRN 2026</div>', unsafe_allow_html=True)
