@@ -124,7 +124,8 @@ with st.sidebar:
 st.markdown('<h2 style="color:#5dade2; margin-bottom:0; font-weight:800;">INFOMED - SISTEMA DE PESQUISA HUOL</h2>', unsafe_allow_html=True)
 st.caption("UFRN - EBSERH | Inteligência Artificial e Farmacovigilância")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📝 Consulta Estruturada", "🔄 Processamento em Lote", "📚 Repositório", "📊 Dashboard"])
+# Abas com ícones mais discretos
+tab1, tab2, tab3, tab4 = st.tabs(["🔍 Consulta Estruturada", "🔄 Processamento em Lote", "📚 Repositório", "📊 Dashboard"])
 
 # --- ABA 1: CONSULTA ESTRUTURADA ---
 with tab1:
@@ -132,13 +133,14 @@ with tab1:
     col1, col2 = st.columns([1, 1.5], gap="large")
     
     with col1:
-        st.markdown("##### 🧩 Entradas Clínicas")
-        f_input = st.text_input("💊 Fármaco(s) envolvido(s):", placeholder="Ex: Toxina Botulínica")
-        p_input = st.text_area("❓ Dúvida Técnica Específica:", placeholder="Ex: Tempo de exposição em TA por 12h...", height=120)
-        c_input = st.text_input("👤 Perfil do Paciente (Opcional):", placeholder="Ex: Adulto, sem comorbidades")
+        st.markdown("##### Entradas Clínicas")
+        f_input = st.text_input("Fármaco(s) envolvido(s):", placeholder="Ex: Toxina Botulínica")
+        p_input = st.text_area("Dúvida Técnica Específica:", placeholder="Ex: Tempo de exposição em TA por 12h...", height=120)
+        c_input = st.text_input("Perfil do Paciente (Opcional):", placeholder="Ex: Adulto, sem comorbidades")
         
         st.markdown('<div class="analyze-btn">', unsafe_allow_html=True)
-        if st.button("▶️ Gerar Parecer Estruturado", use_container_width=True):
+        # Botão sem emojis chamativos, foco na ação
+        if st.button("Analisar Evidências (Gemini 3)", use_container_width=True):
             if f_input and p_input:
                 with st.spinner('Construindo evidências (Gemini 3)...'):
                     contexto_paciente = f"Perfil do Paciente: {c_input}" if c_input else "Perfil do Paciente: Não especificado ou padrão adulto."
@@ -150,7 +152,6 @@ with tab1:
                     resposta, erro = consultar_gemini(prompt_base)
                     
                     if resposta:
-                        # Monta a pergunta visual para salvar no banco
                         pergunta_salva = f"Fármaco: {f_input} | Paciente: {c_input if c_input else 'N/A'}\nDúvida: {p_input}"
                         st.session_state.resposta_atual = resposta
                         st.session_state.pergunta_atual = pergunta_salva
@@ -163,18 +164,18 @@ with tab1:
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
-        st.markdown("##### 📄 Resultado Técnico")
+        st.markdown("##### Resultado Técnico")
         if st.session_state.get('resposta_atual'):
             st.markdown(f'<div class="res-card">{st.session_state.resposta_atual}</div>', unsafe_allow_html=True)
             if st.session_state.get('analise_erro'):
                 st.markdown('<div class="debug-card"><b>🕵️ Auditoria de IA:</b><br>' + st.session_state.analise_erro + '</div>', unsafe_allow_html=True)
         else:
-            st.info("Preencha os dados e clique em Gerar Parecer para visualizar as evidências aqui.")
+            st.info("Preencha os dados e clique em Analisar Evidências para visualizar os resultados aqui.")
 
 # --- ABA 2: PROCESSAMENTO EM LOTE ---
 with tab2:
     st.markdown("---")
-    st.markdown("### 🔄 Processamento Automático de Planilhas")
+    st.markdown("### Processamento Automático de Planilhas")
     st.info("Suba um arquivo Excel (.xlsx) contendo uma coluna exatamente com o nome **Pergunta**. O sistema irá processar todas as linhas e gerar um arquivo para download.")
     
     arquivo_upload = st.file_uploader("Selecione sua planilha de testes", type=['xlsx'])
@@ -186,7 +187,7 @@ with tab2:
                 st.error("Aviso: A planilha precisa ter uma coluna chamada 'Pergunta'.")
             else:
                 st.success(f"Planilha carregada com sucesso! {len(df_lote)} itens encontrados.")
-                if st.button("🚀 Iniciar Processamento em Lote"):
+                if st.button("Iniciar Processamento em Lote"):
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     respostas_lote = []
@@ -204,23 +205,22 @@ with tab2:
                         else:
                             respostas_lote.append(f"ERRO DE API: {erro}")
                             
-                        # Atualiza barra de progresso e dá uma pausa para não estourar limite da API
                         progress_bar.progress((index + 1) / len(df_lote))
                         time.sleep(2) 
                     
                     df_lote['Resposta_IA'] = respostas_lote
-                    df_lote['Avaliacao_Pesquisador'] = "" # Coluna em branco para o professor preencher depois
+                    df_lote['Avaliacao_Pesquisador'] = ""
                     
                     output_lote = io.BytesIO()
                     with pd.ExcelWriter(output_lote, engine='openpyxl') as writer:
                         df_lote.to_excel(writer, index=False, sheet_name='Resultados_IA')
                     
                     status_text.text("✅ Processamento concluído!")
-                    st.download_button(label="📥 Baixar Resultados do Lote", data=output_lote.getvalue(), file_name=f"lote_processado_{datetime.now().strftime('%d_%m')}.xlsx")
+                    st.download_button(label="Baixar Resultados do Lote", data=output_lote.getvalue(), file_name=f"lote_processado_{datetime.now().strftime('%d_%m')}.xlsx")
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
 
-# --- ABA 3 E 4 (CÓDIGO MANTIDO) ---
+# --- ABA 3 E 4 (Mantidos Iguais) ---
 with tab3:
     st.markdown("---")
     df_v = df_logs[df_logs['status'] == 'De Acordo']
