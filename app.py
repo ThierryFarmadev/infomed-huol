@@ -6,19 +6,21 @@ import io
 import google.generativeai as genai
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
+# Mantendo o layout wide e o favicon de pílula
 st.set_page_config(page_title="INFOMED - HUOL", layout="wide", page_icon="💊")
 
 # --- LÓGICA DE API KEY E MODELO (GEMINI 3 FLASH PREVIEW) ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=api_key)
-    # Alterado para o nome técnico correto do Gemini 3 Preview
+    # Mantendo o modelo correto do preview
     model = genai.GenerativeModel('gemini-3-flash-preview')
 except Exception as e:
     st.error(f"Erro de Configuração: {e}")
     st.stop()
 
 # --- FUNÇÕES DO BANCO DE DADOS (SQLite) ---
+# Mantendo toda a lógica de persistência de dados
 def init_db():
     conn = sqlite3.connect('infomed_huol.db')
     c = conn.cursor()
@@ -61,6 +63,7 @@ def extrair_dados():
 init_db()
 
 # --- ESTILIZAÇÃO CSS CUSTOMIZADA ---
+# Mantendo as cores e o arredondamento que definimos
 st.markdown("""
     <style>
     /* Estilização dos Botões */
@@ -78,7 +81,7 @@ st.markdown("""
         border-color: #6b7280;
     }
     div.stButton > button p {
-        font-size: 13px !important;
+        font-size: 14px !important; /* Aumentado ligeiramente para os emojis */
         font-weight: 500;
     }
     /* Estilização da área de texto */
@@ -90,7 +93,9 @@ st.markdown("""
 
 # --- SIDEBAR (BARRA LATERAL) ---
 with st.sidebar:
-    st.markdown("### :material/person_search: PESQUISADOR")
+    # --- ALTERAÇÃO DE ÍCONE ---
+    # Substituindo :material/person_search: por 🔬
+    st.markdown("### 🔬 PESQUISADOR")
     with st.container(border=True):
         st.markdown(f"**Matheus Thierry**")
         st.caption("UFRN / HUOL")
@@ -100,16 +105,22 @@ with st.sidebar:
     # Métrica do Banco de Dados
     st.metric(label="Total de Registros", value=contar_registros())
     
-    if st.button(":material/add_circle: Nova Consulta"):
+    # --- ALTERAÇÃO DE ÍCONE ---
+    # Substituindo :material/add_circle: por ➕
+    if st.button("➕ Nova Consulta"):
         if 'ultima_analise' in st.session_state:
             del st.session_state.ultima_analise
         st.rerun()
 
-    st.markdown("### :material/fact_check: AVALIAÇÃO")
+    # --- ALTERAÇÃO DE ÍCONE ---
+    # Substituindo :material/fact_check: por ✅
+    st.markdown("### ✅ AVALIAÇÃO")
     col_acordo, col_div = st.columns(2)
     
     with col_acordo:
-        if st.button(":material/thumb_up: Acordo"):
+        # --- ALTERAÇÃO DE ÍCONE ---
+        # Substituindo :material/thumb_up: por 👍
+        if st.button("👍 Acordo"):
             if 'ultima_analise' in st.session_state:
                 salvar_registro(st.session_state.texto_enviado, st.session_state.ultima_analise, "Acordo")
                 st.toast("Registrado com sucesso!", icon="✅")
@@ -118,7 +129,9 @@ with st.sidebar:
                 st.warning("Analise algo primeiro.")
             
     with col_div:
-        if st.button(":material/thumb_down: Divergente"):
+        # --- ALTERAÇÃO DE ÍCONE ---
+        # Substituindo :material/thumb_down: por 👎
+        if st.button("👎 Divergente"):
             if 'ultima_analise' in st.session_state:
                 salvar_registro(st.session_state.texto_enviado, st.session_state.ultima_analise, "Divergente")
                 st.toast("Divergência salva no banco.", icon="⚠️")
@@ -127,7 +140,9 @@ with st.sidebar:
                 st.warning("Analise algo primeiro.")
 
     st.markdown("---")
-    st.markdown("### :material/download: EXPORTAR")
+    # --- ALTERAÇÃO DE ÍCONE ---
+    # Substituindo :material/download: por 📥
+    st.markdown("### 📥 EXPORTAR")
     
     # Lógica de Exportação
     dados_para_exportar = extrair_dados()
@@ -135,8 +150,10 @@ with st.sidebar:
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             dados_para_exportar.to_excel(writer, index=False, sheet_name='Registros')
+        # --- ALTERAÇÃO DE ÍCONE ---
+        # Substituindo :material/description: por 📄
         st.download_button(
-            label=":material/description: Gerar Planilha (.xlsx)",
+            label="📄 Gerar Planilha (.xlsx)",
             data=output.getvalue(),
             file_name=f'infomed_huol_{datetime.now().strftime("%Y%m%d")}.xlsx',
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -146,16 +163,19 @@ with st.sidebar:
 st.title("INFOMED - SISTEMA DE PESQUISA HUOL")
 st.caption("UFRN - EBSERH | Inteligência Artificial e Farmacovigilância")
 
+# --- ALTERAÇÃO DE ÍCONES NAS ABAS ---
 tab1, tab2, tab3 = st.tabs([
-    ":material/manage_search: Consulta Técnica", 
-    ":material/database: Repositório", 
-    ":material/dashboard: Dashboard"
+    "🔬 Consulta Técnica", 
+    "🗄️ Repositório Validado", # Usando um emoji de arquivo mais técnico
+    "📊 Dashboard"
 ])
 
 with tab1:
     evidencias = st.text_area("Insira as evidências farmacológicas:", height=250, placeholder="Cole o texto aqui...")
     
-    if st.button(":material/analytics: Analisar Evidências (Gemini 3)", use_container_width=True):
+    # --- ALTERAÇÃO DE ÍCONE ---
+    # Substituindo :material/analytics: por 🧠
+    if st.button("🧠 Analisar Evidências (Gemini 3)", use_container_width=True):
         if evidencias:
             with st.spinner("Gemini 3 Flash analisando dados..."):
                 try:
@@ -176,9 +196,12 @@ with tab1:
             st.warning("Por favor, preencha o campo de evidências.")
 
 with tab2:
-    st.markdown("### :material/history: Histórico de Consultas")
+    # --- ALTERAÇÃO DE ÍCONE ---
+    # Substituindo :material/history: por 📋
+    st.markdown("### 📋 Histórico de Consultas")
     dados_tabela = extrair_dados()
     if not dados_tabela.empty:
+        # Mantendo a configuração avançada da tabela
         st.dataframe(
             dados_tabela,
             use_container_width=True,
