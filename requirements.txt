@@ -1,4 +1,5 @@
 streamlit
-google-generativeai
 pandas
-xlsxwriter
+google-generativeai
+XlsxWriter
+plotly

@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import io
 import google.generativeai as genai
+import plotly.express as px # Adicionado para o gráfico colorido
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="INFOMED - HUOL", layout="wide", page_icon="💊")
@@ -12,7 +13,7 @@ st.set_page_config(page_title="INFOMED - HUOL", layout="wide", page_icon="💊")
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=api_key)
-    # Alterado para o nome técnico correto do Gemini 3 Preview
+    # Mantido o modelo conforme sua instrução para evitar erros no projeto
     model = genai.GenerativeModel('gemini-3-flash-preview')
 except Exception as e:
     st.error(f"Erro de Configuração: {e}")
@@ -129,7 +130,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### :material/download: EXPORTAR")
     
-    # Lógica de Exportação
+    # Lógica de Exportação Corrigida (Aparece mesmo sem dados, mas desativado)
     dados_para_exportar = extrair_dados()
     if not dados_para_exportar.empty:
         output = io.BytesIO()
@@ -141,6 +142,9 @@ with st.sidebar:
             file_name=f'infomed_huol_{datetime.now().strftime("%Y%m%d")}.xlsx',
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
+    else:
+        # Mostra um botão desativado se o banco estiver vazio
+        st.button(":material/description: Gerar Planilha (.xlsx)", disabled=True, help="O banco de dados está vazio. Realize análises primeiro.")
 
 # --- ÁREA PRINCIPAL ---
 st.title("INFOMED - SISTEMA DE PESQUISA HUOL")
@@ -197,8 +201,28 @@ with tab2:
 with tab3:
     if not dados_para_exportar.empty:
         st.subheader("Distribuição de Avaliações")
-        contagem = dados_para_exportar['avaliacao'].value_counts()
-        st.bar_chart(contagem)
+        
+        # Prepara os dados para o gráfico do Plotly
+        contagem = dados_para_exportar['avaliacao'].value_counts().reset_index()
+        contagem.columns = ['Avaliação', 'Quantidade']
+        
+        # Gráfico com cores personalizadas
+        fig = px.bar(
+            contagem, 
+            x='Avaliação', 
+            y='Quantidade',
+            color='Avaliação',
+            color_discrete_map={
+                'Acordo': '#1f77b4',     # Azul
+                'Divergente': '#d62728'  # Vermelho
+            },
+            text='Quantidade' # Mostra o número em cima da barra
+        )
+        
+        # Oculta a legenda redundante e ajusta layout
+        fig.update_layout(showlegend=False, xaxis_title="", yaxis_title="Quantidade de Registros")
+        
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Realize avaliações para visualizar as estatísticas.")
 
