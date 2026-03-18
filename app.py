@@ -1,248 +1,207 @@
 import streamlit as st
-import requests
 import sqlite3
 import pandas as pd
-import io
-import time
-import plotly.express as px
 from datetime import datetime
+import io
+import google.generativeai as genai
 
-# --- 1. CONFIGURAÇÃO E BANCO DE DADOS ---
-st.set_page_config(page_title="INFOMED - HUOL", page_icon=":material/local_hospital:", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="INFOMED - HUOL", layout="wide", page_icon="💊")
 
-def iniciar_db():
-    conn = sqlite3.connect('feedback_ic.db')
+# --- LÓGICA DE API KEY E MODELO (GEMINI 3 FLASH PREVIEW) ---
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+    # Alterado para o nome técnico correto do Gemini 3 Preview
+    model = genai.GenerativeModel('gemini-3-flash-preview')
+except Exception as e:
+    st.error(f"Erro de Configuração: {e}")
+    st.stop()
+
+# --- FUNÇÕES DO BANCO DE DADOS (SQLite) ---
+def init_db():
+    conn = sqlite3.connect('infomed_huol.db')
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS avaliacoes 
+    c.execute('''CREATE TABLE IF NOT EXISTS registros 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  data TEXT, farmaco TEXT, pergunta TEXT, 
-                  resposta TEXT, status TEXT, observacao TEXT, analise_erro TEXT)''')
+                  data TEXT, 
+                  evidencia TEXT, 
+                  resultado_ia TEXT, 
+                  avaliacao TEXT)''')
     conn.commit()
     conn.close()
 
-def carregar_dados():
+def salvar_registro(evidencia, resultado_ia, avaliacao):
+    conn = sqlite3.connect('infomed_huol.db')
+    c = conn.cursor()
+    data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    c.execute("INSERT INTO registros (data, evidencia, resultado_ia, avaliacao) VALUES (?, ?, ?, ?)",
+              (data_atual, evidencia, resultado_ia, avaliacao))
+    conn.commit()
+    conn.close()
+
+def contar_registros():
     try:
-        conn = sqlite3.connect('feedback_ic.db')
-        df = pd.read_sql_query("SELECT * FROM avaliacoes", conn)
+        conn = sqlite3.connect('infomed_huol.db')
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM registros")
+        total = c.fetchone()[0]
         conn.close()
-        return df
-    except: return pd.DataFrame()
+        return total
+    except:
+        return 0
 
-def registrar_feedback(status, obs="", analise=""):
-    if st.session_state.get('resposta_atual'):
-        try:
-            conn = sqlite3.connect('feedback_ic.db')
-            c = conn.cursor()
-            data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            farmaco_label = st.session_state.get('farmaco_atual', 'LOTE/MULTIPLO')
-            texto_excel = st.session_state.resposta_atual.replace("**", "").replace("#", "").replace("`", "")
-            texto_excel = " ".join(texto_excel.splitlines()) 
-            c.execute("INSERT INTO avaliacoes (data, farmaco, pergunta, resposta, status, observacao, analise_erro) VALUES (?,?,?,?,?,?,?)",
-                      (data_atual, farmaco_label, st.session_state.pergunta_atual, texto_excel, status, obs, analise))
-            conn.commit()
-            conn.close()
-            st.toast("Registro salvo com sucesso!", icon=":material/save:")
-            st.rerun()
-        except Exception as e: st.error(f"Erro ao salvar: {e}", icon=":material/error:")
+def extrair_dados():
+    conn = sqlite3.connect('infomed_huol.db')
+    df = pd.read_sql_query("SELECT id, data, evidencia, resultado_ia, avaliacao FROM registros ORDER BY id DESC", conn)
+    conn.close()
+    return df
 
-def consultar_gemini(prompt_completo):
-    try:
-        if "GEMINI_KEY" in st.secrets:
-            CHAVE = st.secrets["GEMINI_KEY"]
-            # MODELO BLINDADO CONFORME INSTRUÇÃO (Não alterar)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={CHAVE}"
-            payload = {"contents": [{"parts": [{"text": prompt_completo}]}]}
-            r = requests.post(url, json=payload, timeout=40)
-            if r.status_code == 200:
-                return r.json()['candidates'][0]['content']['parts'][0]['text'], None
-            else:
-                return None, f"Erro Google: {r.json().get('error', {}).get('message', 'Falha na API')}"
-        else:
-            return None, "Chave API não configurada nos Secrets."
-    except Exception as e:
-        return None, str(e)
+# Inicializar o banco
+init_db()
 
-iniciar_db()
-
-# --- 2. CSS ---
+# --- ESTILIZAÇÃO CSS CUSTOMIZADA ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; background-color: #0e1117; }
-    .sidebar-label { color: #5dade2; font-weight: 700; font-size: 0.8rem; margin-top: 25px; text-transform: uppercase; }
-    .res-card { background: #1c1f26; padding: 25px; border-radius: 12px; border: 1px solid #30363d; color: #e6edf3; line-height: 1.8; margin-bottom: 20px;}
-    .debug-card { background: #2d1b1b; padding: 20px; border-radius: 8px; border: 1px solid #ff4b4b; color: #ffbcbc; margin-top: 15px; font-size: 0.9rem; }
-    div.stButton > button { background-color: #2d333b !important; color: #adb5bd !important; font-weight: 600 !important; border-radius: 6px !important; }
-    .analyze-btn button { background-color: #1a202c !important; color: #5dade2 !important; border: 1px solid #5dade2 !important; height: 50px !important; }
+    /* Estilização dos Botões */
+    div.stButton > button {
+        width: 100%;
+        border-radius: 8px;
+        background-color: #374151; /* Cinza Escuro */
+        color: #ffffff;
+        border: 1px solid #4b5563;
+        height: 3em;
+        transition: all 0.3s ease;
+    }
+    div.stButton > button:hover {
+        background-color: #1f2937;
+        border-color: #6b7280;
+    }
+    div.stButton > button p {
+        font-size: 13px !important;
+        font-weight: 500;
+    }
+    /* Estilização da área de texto */
+    .stTextArea textarea {
+        border-radius: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. SIDEBAR ---
-df_logs = carregar_dados()
+# --- SIDEBAR (BARRA LATERAL) ---
 with st.sidebar:
-    st.markdown("### :material/science: PESQUISADOR")
-    st.info(f"**Matheus Thierry**\n\nUFRN / HUOL", icon=":material/person:")
-    st.metric("Total de Registros", len(df_logs))
-
-    if st.button(":material/add: Nova Consulta", use_container_width=True):
-        st.session_state.pergunta_atual, st.session_state.resposta_atual, st.session_state.analise_erro = "", "", ""
+    st.markdown("### :material/person_search: PESQUISADOR")
+    with st.container(border=True):
+        st.markdown(f"**Matheus Thierry**")
+        st.caption("UFRN / HUOL")
+    
+    st.markdown("---")
+    
+    # Métrica do Banco de Dados
+    st.metric(label="Total de Registros", value=contar_registros())
+    
+    if st.button(":material/add_circle: Nova Consulta"):
+        if 'ultima_analise' in st.session_state:
+            del st.session_state.ultima_analise
         st.rerun()
+
+    st.markdown("### :material/fact_check: AVALIAÇÃO")
+    col_acordo, col_div = st.columns(2)
     
-    st.markdown('<p class="sidebar-label">:material/fact_check: AVALIAÇÃO</p>', unsafe_allow_html=True)
-    col_a, col_b = st.columns(2, gap="small")
-    with col_a:
-        if st.button(":material/thumb_up: Acordo", use_container_width=True): registrar_feedback("De Acordo")
-    with col_b:
-        if st.button(":material/thumb_down: Divergente", use_container_width=True): st.session_state.show_obs = True
-    
-    if st.session_state.get('show_obs', False):
-        obs_input = st.text_input("Justificativa:")
-        if obs_input:
-            if st.button(":material/smart_toy: Analisar Causa do Erro", use_container_width=True):
-                with st.spinner('IA analisando a falha...'):
-                    prompt_debug = f"Compare sua resposta com a justificativa do especialista. Resposta: {st.session_state.resposta_atual}. Justificativa: {obs_input}. Explique a causa da divergência."
-                    analise, erro = consultar_gemini(prompt_debug)
-                    if analise:
-                        st.session_state.analise_erro = analise
-                        st.session_state.justificativa_temp = obs_input
-                    else: st.error(erro, icon=":material/error:")
+    with col_acordo:
+        if st.button(":material/thumb_up: Acordo"):
+            if 'ultima_analise' in st.session_state:
+                salvar_registro(st.session_state.texto_enviado, st.session_state.ultima_analise, "Acordo")
+                st.toast("Registrado com sucesso!", icon="✅")
+                st.rerun()
+            else:
+                st.warning("Analise algo primeiro.")
             
-            if st.session_state.get('analise_erro'):
-                if st.button(":material/save: Finalizar e Salvar"):
-                    registrar_feedback("Divergente", st.session_state.justificativa_temp, st.session_state.analise_erro)
-                    st.session_state.show_obs = False
+    with col_div:
+        if st.button(":material/thumb_down: Divergente"):
+            if 'ultima_analise' in st.session_state:
+                salvar_registro(st.session_state.texto_enviado, st.session_state.ultima_analise, "Divergente")
+                st.toast("Divergência salva no banco.", icon="⚠️")
+                st.rerun()
+            else:
+                st.warning("Analise algo primeiro.")
 
-    st.markdown('<p class="sidebar-label">:material/file_download: EXPORTAR</p>', unsafe_allow_html=True)
-    if st.button(":material/table_view: Gerar Planilha (.xlsx)", use_container_width=True):
-        if not df_logs.empty:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_logs.to_excel(writer, index=False, sheet_name='Feedback_IC')
-            st.download_button(label="Baixar Excel", data=output.getvalue(), file_name=f"relatorio_huol_{datetime.now().strftime('%d_%m')}.xlsx", use_container_width=True, icon=":material/download:")
+    st.markdown("---")
+    st.markdown("### :material/download: EXPORTAR")
+    
+    # Lógica de Exportação
+    dados_para_exportar = extrair_dados()
+    if not dados_para_exportar.empty:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            dados_para_exportar.to_excel(writer, index=False, sheet_name='Registros')
+        st.download_button(
+            label=":material/description: Gerar Planilha (.xlsx)",
+            data=output.getvalue(),
+            file_name=f'infomed_huol_{datetime.now().strftime("%Y%m%d")}.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
 
-# --- 4. CORPO PRINCIPAL ---
-st.markdown('<h2 style="color:#5dade2; margin-bottom:0; font-weight:800;">INFOMED - SISTEMA DE PESQUISA HUOL</h2>', unsafe_allow_html=True)
+# --- ÁREA PRINCIPAL ---
+st.title("INFOMED - SISTEMA DE PESQUISA HUOL")
 st.caption("UFRN - EBSERH | Inteligência Artificial e Farmacovigilância")
 
-# Abas com Material Icons Nativos
-tab1, tab2, tab3, tab4 = st.tabs([
-    ":material/manage_search: Consulta Estruturada", 
-    ":material/batch_prediction: Processamento em Lote", 
-    ":material/library_books: Repositório", 
-    ":material/query_stats: Dashboard"
+tab1, tab2, tab3 = st.tabs([
+    ":material/manage_search: Consulta Técnica", 
+    ":material/database: Repositório", 
+    ":material/dashboard: Dashboard"
 ])
 
-# --- ABA 1: CONSULTA ESTRUTURADA ---
 with tab1:
-    st.markdown("---")
-    col1, col2 = st.columns([1, 1.5], gap="large")
+    evidencias = st.text_area("Insira as evidências farmacológicas:", height=250, placeholder="Cole o texto aqui...")
     
-    with col1:
-        st.markdown("##### Entradas Clínicas")
-        f_input = st.text_input("Fármaco(s) envolvido(s):", placeholder="Ex: Toxina Botulínica")
-        p_input = st.text_area("Dúvida Técnica Específica:", placeholder="Ex: Tempo de exposição em TA por 12h...", height=120)
-        c_input = st.text_input("Perfil do Paciente (Opcional):", placeholder="Ex: Adulto, sem comorbidades")
-        
-        st.markdown('<div class="analyze-btn">', unsafe_allow_html=True)
-        if st.button(":material/play_arrow: Gerar Parecer Estruturado", use_container_width=True):
-            if f_input and p_input:
-                with st.spinner('Construindo evidências...'):
-                    contexto_paciente = f"Perfil do Paciente: {c_input}" if c_input else "Perfil do Paciente: Não especificado ou padrão adulto."
-                    prompt_base = (
-                        "Aja como farmacêutico clínico do HUOL. Estrutura obrigatória: 1. Alerta de Segurança, 2. Parecer Técnico (com % de Confiança), 3. Tabela Resumo, 4. Referência ABNT.\n\n"
-                        f"Fármaco: {f_input}\n{contexto_paciente}\nDúvida: {p_input}"
-                    )
+    if st.button(":material/analytics: Analisar Evidências (Gemini 3)", use_container_width=True):
+        if evidencias:
+            with st.spinner("Gemini 3 Flash analisando dados..."):
+                try:
+                    # Chamada ao modelo específico do preview
+                    prompt = f"Atue como um especialista em farmacovigilância clínica. Analise o seguinte texto em busca de divergências terapêuticas, riscos ou alertas importantes: {evidencias}"
+                    response = model.generate_content(prompt)
                     
-                    resposta, erro = consultar_gemini(prompt_base)
+                    # Armazena para persistência
+                    st.session_state.ultima_analise = response.text
+                    st.session_state.texto_enviado = evidencias
                     
-                    if resposta:
-                        pergunta_salva = f"Fármaco: {f_input} | Paciente: {c_input if c_input else 'N/A'}\nDúvida: {p_input}"
-                        st.session_state.resposta_atual = resposta
-                        st.session_state.pergunta_atual = pergunta_salva
-                        st.session_state.farmaco_atual = f_input.upper()
-                        st.rerun()
-                    else:
-                        st.error(erro, icon=":material/warning:")
-            else:
-                st.warning("Preencha ao menos o Fármaco e a Dúvida Técnica.", icon=":material/warning:")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("##### Resultado Técnico")
-        if st.session_state.get('resposta_atual'):
-            st.markdown(f'<div class="res-card">{st.session_state.resposta_atual}</div>', unsafe_allow_html=True)
-            if st.session_state.get('analise_erro'):
-                st.markdown('<div class="debug-card"><b>:material/policy: Auditoria de IA:</b><br>' + st.session_state.analise_erro + '</div>', unsafe_allow_html=True)
+                    st.success("Análise concluída!")
+                    st.markdown("---")
+                    st.markdown(response.text)
+                except Exception as e:
+                    st.error(f"Erro na análise da API: {e}")
         else:
-            st.info("Preencha os dados e clique em Gerar Parecer para visualizar as evidências aqui.", icon=":material/info:")
+            st.warning("Por favor, preencha o campo de evidências.")
 
-# --- ABA 2: PROCESSAMENTO EM LOTE ---
 with tab2:
-    st.markdown("---")
-    st.markdown("### Processamento Automático de Planilhas")
-    st.info("Suba um arquivo Excel (.xlsx) contendo uma coluna exatamente com o nome **Pergunta**. O sistema irá processar todas as linhas e gerar um arquivo para download.", icon=":material/lightbulb:")
-    
-    arquivo_upload = st.file_uploader("Selecione sua planilha de testes", type=['xlsx'])
-    
-    if arquivo_upload is not None:
-        try:
-            df_lote = pd.read_excel(arquivo_upload)
-            if 'Pergunta' not in df_lote.columns:
-                st.error("Aviso: A planilha precisa ter uma coluna chamada 'Pergunta'.", icon=":material/error:")
-            else:
-                st.success(f"Planilha carregada com sucesso! {len(df_lote)} itens encontrados.", icon=":material/check_circle:")
-                if st.button(":material/rocket_launch: Iniciar Processamento em Lote"):
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    respostas_lote = []
-                    
-                    prompt_lote = "Aja como farmacêutico do HUOL. Estrutura: Alerta, Parecer, Tabela, Referência ABNT.\n\nPergunta: "
-                    
-                    for index, row in df_lote.iterrows():
-                        pergunta_atual = row['Pergunta']
-                        status_text.text(f"Processando item {index + 1} de {len(df_lote)}...")
-                        
-                        resposta, erro = consultar_gemini(f"{prompt_lote} {pergunta_atual}")
-                        
-                        if resposta:
-                            respostas_lote.append(resposta)
-                        else:
-                            respostas_lote.append(f"ERRO DE API: {erro}")
-                            
-                        progress_bar.progress((index + 1) / len(df_lote))
-                        time.sleep(2) 
-                    
-                    df_lote['Resposta_IA'] = respostas_lote
-                    df_lote['Avaliacao_Pesquisador'] = "" 
-                    
-                    output_lote = io.BytesIO()
-                    with pd.ExcelWriter(output_lote, engine='openpyxl') as writer:
-                        df_lote.to_excel(writer, index=False, sheet_name='Resultados_IA')
-                    
-                    status_text.text("Processamento concluído!")
-                    st.download_button(label="Baixar Resultados do Lote", data=output_lote.getvalue(), file_name=f"lote_processado_{datetime.now().strftime('%d_%m')}.xlsx", icon=":material/download:")
-        except Exception as e:
-            st.error(f"Erro ao ler arquivo: {e}", icon=":material/error:")
+    st.markdown("### :material/history: Histórico de Consultas")
+    dados_tabela = extrair_dados()
+    if not dados_tabela.empty:
+        st.dataframe(
+            dados_tabela,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "id": "Ref.",
+                "data": "Data/Hora",
+                "evidencia": "Texto",
+                "resultado_ia": "Análise Gemini",
+                "avaliacao": "Status"
+            }
+        )
+    else:
+        st.info("Nenhum registro encontrado no banco de dados.")
 
-# --- ABA 3 E 4 ---
 with tab3:
-    st.markdown("---")
-    df_v = df_logs[df_logs['status'] == 'De Acordo']
-    if df_v.empty: st.info("Repositório vazio. Valide respostas para populá-lo.", icon=":material/inbox:")
+    if not dados_para_exportar.empty:
+        st.subheader("Distribuição de Avaliações")
+        contagem = dados_para_exportar['avaliacao'].value_counts()
+        st.bar_chart(contagem)
     else:
-        for _, r in df_v[::-1].iterrows():
-            with st.expander(f":material/medication: {r['farmaco']} - {r['data']}"):
-                st.write(r['resposta'])
+        st.info("Realize avaliações para visualizar as estatísticas.")
 
-with tab4:
-    st.markdown("---")
-    if not df_logs.empty:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(px.pie(df_logs, names='status', color='status', hole=0.4, color_discrete_map={'De Acordo':'#5dade2', 'Divergente':'#e74c3c'}).update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
-        with col2:
-            st.plotly_chart(px.bar(df_logs['farmaco'].value_counts().head(5).reset_index(), x='farmaco', y='count', color_discrete_sequence=['#5dade2']).update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
-    else:
-        st.warning("Sem dados para exibir estatísticas.", icon=":material/warning:")
-
-st.markdown('<br><div style="text-align: center; font-size: 0.7rem; color: gray;">Matheus Thierry | Pesquisador UFRN 2026</div>', unsafe_allow_html=True)
+# --- RODAPÉ ---
+st.markdown("---")
+st.markdown("<div style='text-align: center; color: gray; font-size: 12px;'>Matheus Thierry | Pesquisador UFRN 2026</div>", unsafe_allow_html=True)
